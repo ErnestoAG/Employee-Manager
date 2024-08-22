@@ -1,153 +1,175 @@
 const inquirer = require('inquirer');
 const {Pool} = require('pg');
+require('dotenv').config();
 
 const entrance = new Pool(
     {
-      user: "postgres",
-      password: "Erness33",
+      user: process.env.USER,
+      password: process.env.PASSWORD,
       host: 'localhost',
-      database: 'company_db'
+      database: process.env.DATABASE
     },
 );
+console.log(process.env.USER);
+console.log(process.env.PASSWORD);
+console.log(process.env.DATABASE);
+
+const options = ["View all employees", "Add employee", "Delete employee", "Update employee role", "View all roles", "Add role", "Delete role", "View all departments", "Add department", "Delete department", "Quit"];
+const query = {type: 'list', message: "What would you like to do?", choices: options, name: 'query'};
+
+function recursion() {
+    inquirer.prompt(query).then(answer => {handleRequest(answer.query);});
+};
 
 function handleRequest(command) {
     switch (command) {
         case "View all employees":
 
             async function displayEmployees() {
-                const ftn = `SELECT * FROM employee JOIN role ON role.id = employee.role_id`;
+                const ftn = `SELECT e.id, e.first_name, e.last_name, e.role_id, e.manager_id, r.salary, r.title, r.department_id, d.department_name
+                 FROM employee e LEFT JOIN role r ON r.id = e.role_id LEFT JOIN department d ON d.id = r.department_id`;
 
                 const res = await entrance.query(ftn);
-                console.log("id     First Name     Last Name     Salary     Title                    Manager");
-                console.log("--     ----------     ---------     ------     -----                    -------");
-                for (let i = 0; i < res.rows.length; i++) {
-                    var fname = res.rows[i].first_name;
-                    var lname = res.rows[i].last_name;
-                    var salary = res.rows[i].salary;
-                    var title = res.rows[i].title;
-                    var id = JSON.stringify(res.rows[i].id);
-                    var space = 15 - fname.length;
-                    var lspace = 14 - lname.length;
-                    var ispace = 7 - id.length;
-                    var tspace = 25 - title.length;
-                    var wspace = 11 - salary.length;
-                    for (let j = 0; j < space; j++) {
-                        fname = fname + " ";
-                    }
-                    for (let q = 0; q < lspace; q++) {
-                        lname = lname + " ";
-                    }
-                    for (let k = 0; k < ispace; k++) {
-                        id = id + " ";
-                    }
-                    for (let l = 0; l < wspace; l++) {
-                        salary = salary + " ";
-                    }
-                    for (let m = 0; m < tspace; m++) {
-                        title = title + " ";
-                    }
-                    console.log(`${id}${fname}${lname}${salary}${title}${res.rows[i].manager_id}`);
-                }
+                console.table(res.rows);
             }
 
-            displayEmployees();
+            displayEmployees().then(recursion);
 
             break;
         case "Add employee":
+         
+            async function addEmployee() {
+                async function addEmp(response) {
+                    if (response.m != "null") {
+                        response.m = Number(response.m);
+                    }
 
-            var data = [];
+                    const ftn = `INSERT INTO employee (first_name, last_name, role_id, manager_id) VALUES ('${response.fn}', '${response.ln}', ${Number(response.r)}, ${response.m})`;
 
-            async function addEmp(response) {
-                const ftn = `INSERT INTO employee (first_name, last_name, role_id, manager_id) VALUES ($1, $2, $3, $4)`;
+                    const res = await entrance.query(ftn);
+                    console.log("Employee added");
+                    recursion();
+                };
 
-                const res = await entrance.query(ftn, response);
-                console.log("Employee added");
+                const ftn2 = `SELECT title AS "name", id AS "value" FROM role`;
+                const role = await entrance.query(ftn2);
+
+                const ftn3 = `SELECT first_name AS "name", id AS "value" FROM employee`;
+                const manager = await entrance.query(ftn3);
+
+                var managers = manager.rows;
+                managers.push('null');
+
+                var data = [
+                    {type: 'input', message: 'Input first name:', name: 'fn'},
+                    {type: 'input', message: 'Input last name:', name: 'ln'},
+                    {type: 'list', message: 'Select role:', name: 'r', choices: role.rows},
+                    {type: 'list', message: 'Select manager:', name: 'm', choices: managers}
+                ];
+
+                inquirer.prompt(data).then((answer) => {addEmp(answer)});
             };
-            
-            inquirer.prompt({type: 'input', message: 'Input first name:', name: 'fn'}).then((answer) => data.push(answer.fn));
-            inquirer.prompt({type: 'input', message: 'Input last name:', name: 'ln'}).then((answer) => data.push(answer.ln));
-            inquirer.prompt({type: 'input', message: 'Input role id:', name: 'r'}).then((answer) => data.push(Number(answer.r)));
-            inquirer.prompt({type: 'input', message: 'Input manager id:', name: 'm'}).then((answer) => data.push(Number(answer.m)));
-            addEmp(data);
+            addEmployee();
+
+            break;
+        case "Delete employee":
+            async function deleteEmp() {
+                async function delEmp(response) {
+                    const ftn = `DELETE FROM employee WHERE id = ${Number(response.e)}`;
+
+                    const res = await entrance.query(ftn);
+                    console.log("Employee deleted");
+                    recursion();
+                };
+
+                const ftn2 = `SELECT first_name AS "name", id AS "value" FROM employee`;
+                const emp = await entrance.query(ftn2);
+
+                inquirer.prompt({type: 'list', message: 'Input employee id:', name: 'e', choices: emp.rows}).then((answer) => {delEmp(answer)});
+            };
+            deleteEmp();
 
             break;
         case "Update employee role":
+            async function updateEmployee() {
+                async function updateEmp(response) {
+                    const ftn = `UPDATE employee SET role_id = ${Number(response.r)} WHERE id = ${Number(response.e)}`;
 
-            var data = [];
-            
-            async function updateEmp(response) {
-                const ftn = `UPDATE employee SET role_id = $1 WHERE id = $2`;
+                    const res = await entrance.query(ftn);
+                    console.log("Employee updated");
+                    recursion();
+                }
 
-                const res = await entrance.query(ftn, response);
-                console.log("Employee updated");
-            }
+                const ftn2 = `SELECT title AS "name", id AS "value" FROM role`;
+                const role = await entrance.query(ftn2);
 
-            inquirer.prompt({type: 'input', message: 'Input role id:', name: 'r'}).then((answer) => data.push(answer.r));
-            inquirer.prompt({type: 'input', message: 'Input employee id:', name: 'id'}).then((answer) => data.push(answer.id));
-            updateEmp(data);
+                const ftn3 = `SELECT first_name AS "name", id AS "value" FROM employee`;
+                const employee = await entrance.query(ftn3);
+
+                var data = [
+                    {type: 'list', message: 'Select role:', name: 'r', choices: role.rows},
+                    {type: 'list', message: 'Select employee:', name: 'e', choices: employee.rows},
+                ];
+
+                inquirer.prompt(data).then((answer) => {updateEmp(answer)});
+            };
+            updateEmployee();
 
             break;
         case "View all roles":
 
             async function displayRoles() {
-                const ftn = `SELECT * FROM role JOIN department ON department.id = role.department_id`;
+                const ftn = `SELECT * FROM role LEFT JOIN department ON department.id = role.department_id`;
 
                 const res = await entrance.query(ftn);
-                console.log("id     Salary     Title                    Department");
-                console.log("--     ------     -----                    ----------");
-                for (let i = 0; i < res.rows.length; i++) {
-                    var salary = res.rows[i].salary;
-                    var id = JSON.stringify(res.rows[i].id);
-                    var title = res.rows[i].title;
-                    var space = 11 - salary.length;
-                    var ispace = 7 - id.length;
-                    var tspace = 25 - title.length;
-                    for (let j = 0; j < space; j++) {
-                        salary = salary + " ";
-                    }
-                    for (let k = 0; k < ispace; k++) {
-                        id = id + " ";
-                    }
-                    for (let l = 0; l < tspace; l++) {
-                        title = title + " ";
-                    }
-                    console.log(`${id}${salary}${title}${res.rows[i].department_name}`);
-                }
+                console.table(res.rows);
             }
 
-            displayRoles();
+            displayRoles().then(recursion);
 
             break;
         case "Add role":
 
-            var data = [];
+            async function createRole() {
+                async function addRole(response) {
+                    const ftn = `INSERT INTO role (salary, title, department_id) VALUES (${parseFloat(response.s).toFixed(2)}, '${response.t}', ${Number(response.id)})`;
 
-            async function addRole(response) {
-                const ftn = `INSERT INTO role (salary, title, department_id) VALUES ($1, $2, $3)`;
+                    const res = await entrance.query(ftn);
+                    console.log("Role added");
+                    recursion();
+                };
 
-                const res = await entrance.query(ftn, response);
-                console.log("Role added");
+                const ftn2 = `SELECT department_name AS "name", id AS "value" FROM department`;
+                const dept = await entrance.query(ftn2);
+
+                var data = [
+                    {type: 'input', message: 'Input salary:', name: 's'},
+                    {type: 'input', message: 'Input title:', name: 't'},
+                    {type: 'list', message: 'Select department:', name: 'id', choices: dept.rows},
+                ];
+
+                inquirer.prompt(data).then((answer) => {addRole(answer)});
             };
-            
-            inquirer.prompt({type: 'input', message: 'Input salary:', name: 'salary'}).then((answer) => data.push(Number(answer.salary)));
-            inquirer.prompt({type: 'input', message: 'Input title:', name: 'title'}).then((answer) => data.push(answer.title));
-            inquirer.prompt({type: 'input', message: 'Input department id:', name: 'id'}).then((answer) => data.push(answer.id));
-            addRole(data);
+            createRole();
 
             break;
         case "Delete role":
 
-            var data = [];
+            async function deleteRole() {
+                async function delRole(response) {
+                    const ftn = `DELETE FROM role WHERE id = ${Number(response.r)}`;
 
-            async function delRole(response) {
-                const ftn = `DELETE FROM role WHERE id = $1`;
-                data.push(Number(response));
+                    const res = await entrance.query(ftn);
+                    console.log("Role deleted");
+                    recursion();
+                };
 
-                const res = await entrance.query(ftn, data);
-                console.log("Role deleted");
+                const ftn2 = `SELECT title AS "name", id AS "value" FROM role`;
+                const role = await entrance.query(ftn2);
+
+                inquirer.prompt({type: 'list', message: 'Select role id:', name: 'r', choices: role.rows}).then((answer) => {delRole(answer)});
             };
-            
-            inquirer.prompt({type: 'input', name: 'id', message: 'Input role id:'}).then(answer => {delRole(answer.id);});
+            deleteRole();
 
             break;
         case "View all departments":
@@ -156,49 +178,42 @@ function handleRequest(command) {
                 const ftn = `SELECT id, department_name AS department FROM department`;
 
                 const res = await entrance.query(ftn);
-                console.log("id     Department");
-                console.log("--     ----------");
-                for (let i = 0; i < res.rows.length; i++) {
-                    var id = JSON.stringify(res.rows[i].id);
-                    var ispace = 7 - id.length;
-                    for (let k = 0; k < ispace; k++) {
-                        id = id + " ";
-                    }
-                    console.log(`${id}${res.rows[i].department}`);
-                }
+                console.table(res.rows);
             }
 
-            displayDpt();
+            displayDpt().then(recursion);
 
             break;
         case "Add department":
 
-            var data = [];
-
             async function addDpt(response) {
-                data.push(response);
-                const ftn = `INSERT INTO department (department_name) VALUES ($1)`;
+                const ftn = `INSERT INTO department (department_name) VALUES ('${response.d}')`;
 
-                const res = await entrance.query(ftn, data);
+                const res = await entrance.query(ftn);
                 console.log("Department added");
+                recursion();
             };
-            
-            inquirer.prompt({type: 'input', name: 'dpt', message: 'Input department name:'}).then(answer => {addDpt(answer.dpt);});
+
+            inquirer.prompt({type: 'input', message: 'Input department name:', name: 'd'}).then((answer) => {addDpt(answer)});
 
             break;
         case "Delete department":
+            async function deleteDpt() {
+                async function delDpt(response) {
+                    const ftn = `DELETE FROM department WHERE id = ${Number(response.d)}`;
 
-            var data = [];
+                    const res = await entrance.query(ftn);
+                    console.log("Department deleted");
+                    recursion();
+                };
 
-            async function delDpt(response) {
-                data.push(Number(response));
-                const ftn = `DELETE FROM department WHERE id = $1`;
-
-                const res = await entrance.query(ftn, data);
-                console.log("Department deleted");
+                const ftn2 = `SELECT department_name AS "name", id AS "value" FROM department`;
+                const dept = await entrance.query(ftn2);
+                
+                inquirer.prompt({type: 'list', message: 'Select department:', name: 'd', choices: dept.rows}).then(answer => {delDpt(answer)});
             };
-            
-            inquirer.prompt({type: 'input', name: 'dpt', message: 'Input department id:'}).then(answer => {delDpt(answer.dpt);});
+
+            deleteDpt();
 
             break;
         case "Quit":
